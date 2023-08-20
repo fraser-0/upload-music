@@ -1,7 +1,10 @@
-# OS
+## Project specific ignores
+Playlists
+
+## OS
 .DS_Store
 
-# IDEs
+## IDEs
 .fleet
 .idea
 
