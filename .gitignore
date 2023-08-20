@@ -1,44 +1,57 @@
-## Project specific ignores
+# Project specific ignores
+#
+# Add any project specific ignores here.
 Playlists
 
-## OS
+# OS
+#
+# Ignore all files that the OS automatically creates in a directory.
 .DS_Store
 
-## IDEs
-.fleet
+# IDEs
+#
+# Ignore all files that IDEs automatically create in a directory.
 .idea
+.fleet
+
+# Sensitive
+#
+# Ignore sensitive files that should not be shared.
+*.cer
+*.env
+*.env.dev
+*.env.development
+*.env.uat
+*.env.prod
+*.env.production
+*.jks
+*.jwks
+*.key
+*.key.pub
+*.p8
+*.p12
+*.pem
+*.pid
 
 # Xcode
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
-## User settings
+# User settings
+xcuserdata
 xcuserdata/
+**/xcuserdata/*
+*.xcuserdata
+*xcworkspace/xcuserdata/*
+*/xcuserdata/*
 
-## compatibility with Xcode 8 and earlier (ignoring not required starting Xcode 9)
-*.xcscmblueprint
-*.xccheckout
-
-## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
-build/
-DerivedData/
-*.moved-aside
-*.pbxuser
-!default.pbxuser
-*.mode1v3
-!default.mode1v3
-*.mode2v3
-!default.mode2v3
-*.perspectivev3
-!default.perspectivev3
-
-## Obj-C/Swift specific
-*.hmap
-
-## App packaging
+# App packaging
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+# Obj-C/Swift specific
+*.hmap
 
 # Swift Package Manager
 #
@@ -53,30 +66,7 @@ Package.resolved
 # hence it is not needed unless you have added a package configuration file to your project
 .swiftpm
 
-# Custom added
-xcshareddata/
-
-## Other
-.idea
-.DS_Store
-Secrets.plist
-secrets.plist
-Config.xcconfig
-
-**/xcuserdata/*
-*.xcuserdata
-*xcworkspace/xcuserdata/*
-*/xcuserdata/*
-
-# Sensitive
-*.cer
-
-
-# Xcode
-#
-# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
-
-## Playgrounds
+# Playgrounds
 timeline.xctimeline
 playground.xcworkspace
 
@@ -92,7 +82,6 @@ playground.xcworkspace
 #
 # Add this line if you want to avoid checking in source code from Carthage dependencies.
 # Carthage/Checkouts
-
 Carthage/Build
 
 # fastlane
@@ -101,7 +90,6 @@ Carthage/Build
 # screenshots whenever they are needed.
 # For more information about the recommended setup visit:
 # https://docs.fastlane.tools/best-practices/source-control/#source-control
-
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
