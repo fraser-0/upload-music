@@ -46,6 +46,7 @@ xcuserdata/
 */xcuserdata/*
 *.xcworkspacedata
 *.xcscheme
+# Check other files that might be added by Xcode in *.xcodeproj that are user specific
 
 # App packaging
 *.ipa
