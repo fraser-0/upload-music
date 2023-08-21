@@ -12,8 +12,9 @@ Some of the implementation was gotten from the WWDC2021 session
 on MusicKit.
 
 ## Requirements
+- Update the app identifier in the project settings
+- MusicKit service enabled on the new app identifier
 - Apple Music subscription (for user running app)
-- MusicKit service enabled on the app identifier
 - Playlists stored in `Playlists` directory in JSON files (check Models.swift for the types)
 
 ## Run
