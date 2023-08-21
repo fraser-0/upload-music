@@ -8,6 +8,9 @@ to upload playlists to the users Apple Music library. This app works
 but is intended for running locally. It needs refactoring and optimization 
 to make it production ready.
 
+Some of the implementation was gotten from the WWDC2021 session
+on MusicKit.
+
 ## Requirements
 - Apple Music subscription (for user running app)
 - MusicKit service enabled on the app identifier
