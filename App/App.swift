@@ -1,5 +1,4 @@
 import SwiftUI
-import Foundation
 import MusicKit
 
 @main
@@ -51,6 +50,7 @@ struct App: SwiftUI.App {
               .padding([.leading, .trailing], 10)
           }
           .disabled(uploading)
+          .opacity(uploading ? 0.5 : 1.0)
           .buttonStyle(.bordered)
           .colorScheme(.light)
         }
