@@ -32,6 +32,10 @@ it will be skipped. If there is an error searching for the song
 the app will continue but log the error to the console.
 Progress of the upload can be monitored in the console.
 
+For the failed songs, you may have to search and add them manually 
+in Apple Music. The success rate of the search for my playlists 
+was approximately 95% (from approximately 500 song searches).
+
 ## Resources
 
 Ordered by relevance.
