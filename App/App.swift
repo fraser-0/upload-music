@@ -100,7 +100,7 @@ struct App: SwiftUI.App {
   
   /// Read all the files in the Playlists directory and add them to the `playlistsToAdd`.
   @MainActor
-  func readFiles() {
+  func readPlaylistJSONFiles() {
     if var url = Bundle.main.resourceURL {
       do {
         url = URL(string: url.absoluteString + "Playlists")!
@@ -174,71 +174,74 @@ struct App: SwiftUI.App {
     }
   }
   
+  /// Create a playlist in the users Apple Music library.
+  ///
+  /// If you want a simplier approach use `MusicLibrary.shared.createPlaylist`
+  /// however that will add the app as the author name of the library.
   func createPlaylist(name: String) async -> LibraryPlaylist? {
     do {
-      // This works but it will set the author as the App name
-      // Even with nil it will still set the App name as the author name and it can't be overwritten
-      // let newPlaylist = try await MusicLibrary.shared.createPlaylist(name: "Test", authorDisplayName: nil)
-      // print(newPlaylist)
-      
-      // This works and doesn't set the author name
-      
       let libraryPlaylistsURL = URL(string: "https://api.music.apple.com/v1/me/library/playlists")
       
       guard let libraryPlaylistsURL else { return nil }
       
+      // build the request to Apple Music API
       var urlRequest = URLRequest(url: libraryPlaylistsURL)
       urlRequest.httpMethod = "POST"
       urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
       let data = try JSONEncoder().encode(["attributes": ["name": name]])
       urlRequest.httpBody = data
       
+      // make the request to Apple Music API
       let request = MusicDataRequest(urlRequest: urlRequest)
       let response = try await request.response()
-      let responseBody = try JSONDecoder().decode(LibraryPlaylists.self, from: response.data)
-      // print(response.urlResponse.statusCode)
       
+      // parse the response
+      let responseBody = try JSONDecoder().decode(LibraryPlaylists.self, from: response.data)
+      
+      // return the first playlist where the name matches
+      // this is unsafe if there are multiple matching names
+      // for my use there are no clashes
       return responseBody.first(where: {$0.attributes.name == name})
     } catch let error {
-      print(error)
+      print("Failed to create playlist \(name): \(error)")
       return nil
     }
   }
   
-  /// https://developer.apple.com/documentation/applemusicapi/search_for_catalog_resources
-  /// https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
+  /// Search for a song using a term and return the first result.
+  ///
+  /// There are specific requirements for the search term which can be found
+  /// [here](https://developer.apple.com/documentation/applemusicapi/search_for_catalog_resources).
+  /// The country code may need to be replaced if not in Australia.
+  /// Details of country codes can be found [here](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).
   func searchForSong(term: String) async -> SongResult? {
     do {
-      // var libraryPlaylistsURL = URL(string: "https://api.music.apple.com/v1/catalog/au/search?term=\(term.replacingOccurrences(of: " ", with: "+"))&limit=1&types=songs")
-      
       let libraryPlaylistsURL = URL(string: "https://api.music.apple.com/v1/catalog/au/search?term=\(term)&limit=1&types=songs")
       
       guard let libraryPlaylistsURL else { return nil }
       
+      // make the request to Apple Music API
       let request = MusicDataRequest(urlRequest: URLRequest(url: libraryPlaylistsURL))
       let response = try await request.response()
+      
+      // parse the response
       let responseBody = try JSONDecoder().decode(SearchResponse.self, from: response.data)
-      // print(responseBody)
       
+      // return the first song
       return responseBody.results.songs.data.first
-      
-      // guard let playlist = playlists.first else { return }
-      
-      // print(playlist)
-      // print(playlist.attributes.canEdit)
-      
-      // print("https://api.music.apple.com/v1/catalog/au/search?term=\(term.replacingOccurrences(of: " ", with: "+"))&limit=1&types=songs")
     } catch let error {
-      print(error)
-      print("Errored on \(term)")
+      print("\(term) errored.")
+      print("Failed to search for \(term): \(error)")
       return nil
     }
   }
   
+  /// Add tracks to a playlist.
   func addTracks(
     playlistId: MusicItemID,
     songIds: Array<MusicItemID>
   ) async {
+    // build the tracks output
     var output = AddTracksRequest()
     for id in songIds {
       output.data.append(TrackRequestData(id: id))
@@ -249,88 +252,97 @@ struct App: SwiftUI.App {
       
       guard let addTracksURL else { return }
       
+      // build the request to Apple Music API
       var urlRequest = URLRequest(url: addTracksURL)
       urlRequest.httpMethod = "POST"
       urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
       let data = try JSONEncoder().encode(output)
       urlRequest.httpBody = data
       
+      // make the request to Apple Music API
       let request = MusicDataRequest(urlRequest: urlRequest)
       let response = try await request.response()
-      print("Added to playlist response is \(response.urlResponse.statusCode)")
     } catch let error {
-      print(error)
+      print("Failed to added \(songIds.count) to \(playlistId): \(error)")
     }
-  }
-  
-  func test() async {
-    print("Running test")
-    let playlist = await createPlaylist(name: "123")
-    guard let playlist = playlist else {
-      print("No playlist")
-      return
-    }
-    let song = await searchForSong(term: "I miss you blink-182 blink-182")
-    guard let song = song else {
-      print("No song")
-      return
-    }
-    let songIds = [song.id]
-    await addTracks(playlistId: playlist.id, songIds: songIds)
   }
   
   func run() async {
-    await readFiles()
+    // read all the playlist files
+    await readPlaylistJSONFiles()
+    
+    // for each of the playlists to add
     for playlistToAdd in playlistsToAdd {
+      // unsafely get the name
+      // this shouldn't fail it was lazy encoding on the type
       let playlistName = playlistToAdd.name!
-      print("---")
-      print("Running for: \(playlistName)")
-      print("\(playlistToAdd.tracks.count) songs to add")
-      print("---")
+      
+      printStartOfPlaylistUpload(
+        playlistName: playlistName,
+        numberOfTracks: playlistToAdd.tracks.count
+      )
+      
+      // store the ids of the songs to add to the playlist
       var songIds: Array<MusicItemID> = []
+      
+      // loop through all the tracks
+      // search for them
+      // add to them to be added to playlist
       for track in playlistToAdd.tracks {
-        // let trackName = track.trackName.replacingOccurrences(of: "&", with: "&amp;")
-        // let artistName = track.artistName.replacingOccurrences(of: "&", with: "&amp;")
-        // let albumName = track.albumName.replacingOccurrences(of: "&", with: "&amp;")
+        // pull out the song details
         let trackName = track.trackName
         let artistName = track.artistName
         let albumName = track.albumName
+        
+        print("Starting search for \(trackName) by \(artistName).")
+        
+        // build and clean the search term
         let term = "\(trackName) \(artistName) \(albumName)"
           .replacingOccurrences(of: " ", with: "+")
-        // .replacingOccurrences(of: "&", with: "&amp;")
-        // .replacingOccurrences(of: "(", with: "")
-        // .replacingOccurrences(of: ")", with: "")
           .replacingOccurrences(of: "&", with: "and")
           .replacingOccurrences(of: "'", with: "")
           .replacingOccurrences(of: ".", with: "")
           .replacingOccurrences(of: ",", with: "")
           .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        
+        // safely unwrap the term
         guard let term = term else {
-          print("Term isn't encoded for URL")
-          return
-        }
-        print("Term is \(term)")
-        let song = await searchForSong(term: term)
-        guard let song = song else {
-          print("Could not find \(track.trackName) by \(track.artistName).")
+          print("Could not encode \(trackName) by \(artistName) for search.")
           continue
         }
-        print("Found \(track.trackName) by \(track.artistName).")
+        
+        print("The search term is \(term)")
+        
+        // search for the song and unwrap it
+        let song = await searchForSong(term: term)
+        guard let song = song else {
+          print("Could not find \(trackName) by \(artistName).")
+          continue
+        }
+        
+        print("Found \(trackName) by \(track.artistName).")
         songIds.append(song.id)
       }
+      
+      // create the playlist
+      // doing this here so we can kill the app and not have to clean a bunch of playlists
       let playlist = await createPlaylist(name: playlistName)
       guard let playlist = playlist else {
-        print("No playlist")
+        print("\(playlistName) was not created.")
         return
       }
+      
       print("\(playlistName) playlist created.")
+      
+      // add tracks
       print("Adding \(songIds.count) out of \(playlistToAdd.tracks.count)...")
       await addTracks(playlistId: playlist.id, songIds: songIds)
-      print("---")
-      print("Finished for: \(playlistName)")
-      print("\(songIds.count) out of \(playlistToAdd.tracks.count) added.")
-      print("---")
-      print("")
+      
+      printEndOfPlaylistUpload(
+        playlistName: playlistName,
+        numberOfTracksAdded: songIds.count,
+        numberOfTracksExpected: playlistToAdd.tracks.count
+      )
     }
   }
   
@@ -348,5 +360,29 @@ struct App: SwiftUI.App {
   func readAndPrintFileAsAData(fileURL: URL) throws {
     let fileContentsData = try Data(contentsOf: fileURL, options: .mappedIfSafe)
     print("File contents: \(fileContentsData)")
+  }
+  
+  /// Print the start of a new playlist upload.
+  func printStartOfPlaylistUpload(
+    playlistName: String,
+    numberOfTracks: Int
+  ) {
+    print("---")
+    print("Running for: \(playlistName)")
+    print("\(numberOfTracks) songs to add")
+    print("---")
+  }
+  
+  /// Print the end of a new playlist upload.
+  func printEndOfPlaylistUpload(
+    playlistName: String,
+    numberOfTracksAdded: Int,
+    numberOfTracksExpected: Int
+  ) {
+    print("---")
+    print("Finished for: \(playlistName)")
+    print("\(numberOfTracksAdded) out of \(numberOfTracksExpected) added.")
+    print("---")
+    print("")
   }
 }
