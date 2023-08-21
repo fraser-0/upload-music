@@ -4,13 +4,21 @@ import MusicKit
 
 @main
 struct App: SwiftUI.App {
-  @State var playlistsToAdd: Array<PlaylistModel> = []
+  /// The state of the uploading.
+  @State
+  var uploading: Bool = false
+  
+  /// The playlists that need to be added to the users Apple Music library.
+  @State
+  var playlistsToAdd: Array<PlaylistModel> = []
   
   /// The current authorization status of MusicKit.
-  @State var musicAuthorizationStatus: MusicAuthorization.Status
+  @State
+  var musicAuthorizationStatus: MusicAuthorization.Status
   
   /// Opens a URL using the appropriate system service.
-  @Environment(\.openURL) private var openURL
+  @Environment(\.openURL)
+  private var openURL
   
   init() {
     let authorizationStatus = MusicAuthorization.currentStatus
@@ -21,31 +29,28 @@ struct App: SwiftUI.App {
     WindowGroup {
       VStack {
         Spacer()
+        
         Text("Upload Music")
-        Spacer()
-          .frame(height: 20.0)
+        
+        Spacer().frame(height: 20.0)
+        
         if musicAuthorizationStatus == .notDetermined || musicAuthorizationStatus == .denied {
-          Button(action: handleButtonPressed) {
+          Button(action: handleAuthorization) {
             buttonText
               .padding([.leading, .trailing], 10)
           }
-          .buttonStyle(.automatic)
+          .buttonStyle(.bordered)
           .colorScheme(.light)
         } else if musicAuthorizationStatus == .authorized {
-          Button(action: handleButtonPressed) {
+          Button(action: handleAuthorization) {
             buttonText
               .padding([.leading, .trailing], 10)
           }
-          .buttonStyle(.automatic)
+          .buttonStyle(.bordered)
           .colorScheme(.light)
         }
+        
         Spacer()
-      }
-      .onAppear() {
-        Task {
-          // Uncomment to run
-          // await run()
-        }
       }
     }
   }
@@ -56,11 +61,11 @@ struct App: SwiftUI.App {
     let buttonText: Text
     switch musicAuthorizationStatus {
       case .notDetermined:
-        buttonText = Text("Continue")
+        buttonText = Text("Authorize")
       case .denied:
         buttonText = Text("Open Settings")
       case .authorized:
-        buttonText = Text("Sync")
+        buttonText = Text("Start Upload")
       default:
         fatalError("No button should be displayed for current authorization status: \(musicAuthorizationStatus).")
     }
@@ -68,12 +73,12 @@ struct App: SwiftUI.App {
   }
   
   /// Allows the user to authorize Apple Music usage when tapping the Continue/Open Setting button.
-  private func handleButtonPressed() {
+  private func handleAuthorization() {
     switch musicAuthorizationStatus {
       case .notDetermined:
         Task {
           let musicAuthorizationStatus = await MusicAuthorization.request()
-          await update(with: musicAuthorizationStatus)
+          await updateAuthorizationState(with: musicAuthorizationStatus)
         }
       case .denied:
         if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
@@ -87,78 +92,85 @@ struct App: SwiftUI.App {
   
   /// Safely updates the `musicAuthorizationStatus` property on the main thread.
   @MainActor
-  private func update(with musicAuthorizationStatus: MusicAuthorization.Status) {
+  private func updateAuthorizationState(with musicAuthorizationStatus: MusicAuthorization.Status) {
     withAnimation {
       self.musicAuthorizationStatus = musicAuthorizationStatus
     }
   }
+  
+  /// Read all the files in the Playlists directory and add them to the `playlistsToAdd`.
   @MainActor
   func readFiles() {
-    // if let fileURL = Bundle.main.url(forResource: "Playlists/Blink 182 Cover Band", withExtension: "json") {
-    //   do {
-    //     let fileContents = try String(contentsOf: fileURL)
-    //     print("File contents: \(fileContents)")
-    //   } catch {
-    //     print("Error reading file: \(error)")
-    //   }
-    // } else {
-    //   print("File not found in the app bundle.")
-    // }
-    
     if var url = Bundle.main.resourceURL {
       do {
         url = URL(string: url.absoluteString + "Playlists")!
         let fileURLs = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
         let fileNames = fileURLs.map { $0.lastPathComponent }
+        
+        // create a decoder to be used to parse the files
+        let decoder = JSONDecoder()
+        
+        // loop through the files, parse and save them
         for fileName in fileNames {
-          readFile(fileName.replacingOccurrences(of: ".json", with: ""))
+          parseFile(
+            fileName: fileName.replacingOccurrences(of: ".json", with: ""),
+            with: decoder
+          )
         }
-        // print(playlistsToAdd.map { $0.name })
+        
+        // sort the files alphabetically
         playlistsToAdd.sort { $0.name!.lowercased() < $1.name!.lowercased() }
-        // print(playlistsToAdd.map { $0.name })
-        print("All files read.")
+        
+        print("All playlists read from the directory.")
       } catch {
-        print("Error reading app bundle folder: \(error)")
+        print("Error playlists: \(error)")
       }
     } else {
       print("App bundle URL not found.")
     }
   }
   
-  func readFile(_ fileName: String) {
-    let decoder = JSONDecoder()
+  /// Parse a playlist JSON file and add it to `playlistsToAdd`.
+  func parseFile(
+    fileName: String,
+    with decoder: JSONDecoder
+  ) {
     if let fileURL = Bundle.main.url(forResource: "Playlists/\(fileName)", withExtension: "json") {
       do {
-        let fileContentsString = try String(contentsOf: fileURL)
-        // print("File contents: \(fileContentsString)")
         let fileContentsData = try Data(contentsOf: fileURL, options: .mappedIfSafe)
-        // print("File contents: \(fileContentsData)")
         var playlist = try decoder.decode(PlaylistModel.self, from: fileContentsData)
+        
+        // update the playlist name to the file name
         playlist.name = fileName
+        
+        // add to the playlists
         playlistsToAdd.append(playlist)
       } catch {
-        print("Error reading file: \(error)")
+        print("Error reading playlist file: \(error)")
       }
     } else {
-      print("File not found in the app bundle.")
+      print("Playlist not found.")
     }
   }
   
-  func readPlaylists() async {
+  /// Read the users current playlists.
+  ///
+  /// Use if you want to upload to existing playlists.
+  func readPlaylists() async -> LibraryPlaylists? {
     do {
       let libraryPlaylistsURL = URL(string: "https://api.music.apple.com/v1/me/library/playlists")
-  
-      guard let libraryPlaylistsURL else { return }
+      
+      guard let libraryPlaylistsURL else { return nil }
+      
+      /// make the request to Apple Music API
       let request = MusicDataRequest(urlRequest: URLRequest(url: libraryPlaylistsURL))
       let response = try await request.response()
-      let playlists = try JSONDecoder().decode(LibraryPlaylists.self, from: response.data)
-  
-      // print(playlists.first)
-      // print(playlists.first.attributes.canEdit)
       
-      // guard let playlist = playlists.first else { return }
+      // parse and return the playlists
+      return try JSONDecoder().decode(LibraryPlaylists.self, from: response.data)
     } catch let error {
-      print(error)
+      print("Failed to read the user's playlists: \(error)")
+      return nil
     }
   }
   
@@ -209,9 +221,9 @@ struct App: SwiftUI.App {
       // print(responseBody)
       
       return responseBody.results.songs.data.first
-  
+      
       // guard let playlist = playlists.first else { return }
-  
+      
       // print(playlist)
       // print(playlist.attributes.canEdit)
       
@@ -285,9 +297,9 @@ struct App: SwiftUI.App {
         let albumName = track.albumName
         let term = "\(trackName) \(artistName) \(albumName)"
           .replacingOccurrences(of: " ", with: "+")
-          // .replacingOccurrences(of: "&", with: "&amp;")
-          // .replacingOccurrences(of: "(", with: "")
-          // .replacingOccurrences(of: ")", with: "")
+        // .replacingOccurrences(of: "&", with: "&amp;")
+        // .replacingOccurrences(of: "(", with: "")
+        // .replacingOccurrences(of: ")", with: "")
           .replacingOccurrences(of: "&", with: "and")
           .replacingOccurrences(of: "'", with: "")
           .replacingOccurrences(of: ".", with: "")
@@ -320,5 +332,21 @@ struct App: SwiftUI.App {
       print("---")
       print("")
     }
+  }
+  
+  /// Read and print a file as a String.
+  ///
+  /// To be used for testing.
+  func readAndPrintFileAsAString(fileURL: URL) throws {
+    let fileContentsString = try String(contentsOf: fileURL)
+    print("File contents: \(fileContentsString)")
+  }
+  
+  /// Read and print a file as a Data.
+  ///
+  /// To be used for testing.
+  func readAndPrintFileAsAData(fileURL: URL) throws {
+    let fileContentsData = try Data(contentsOf: fileURL, options: .mappedIfSafe)
+    print("File contents: \(fileContentsData)")
   }
 }
