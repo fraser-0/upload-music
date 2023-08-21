@@ -42,10 +42,15 @@ struct App: SwiftUI.App {
           .buttonStyle(.bordered)
           .colorScheme(.light)
         } else if musicAuthorizationStatus == .authorized {
-          Button(action: handleAuthorization) {
+          Button {
+            Task {
+              await run()
+            }
+          } label: {
             buttonText
               .padding([.leading, .trailing], 10)
           }
+          .disabled(uploading)
           .buttonStyle(.bordered)
           .colorScheme(.light)
         }
@@ -59,16 +64,22 @@ struct App: SwiftUI.App {
   /// authorization status.
   private var buttonText: Text {
     let buttonText: Text
-    switch musicAuthorizationStatus {
-      case .notDetermined:
-        buttonText = Text("Authorize")
-      case .denied:
-        buttonText = Text("Open Settings")
-      case .authorized:
-        buttonText = Text("Start Upload")
-      default:
-        fatalError("No button should be displayed for current authorization status: \(musicAuthorizationStatus).")
+    
+    if uploading {
+      buttonText = Text("Uploading...")
+    } else {
+      switch musicAuthorizationStatus {
+        case .notDetermined:
+          buttonText = Text("Authorize")
+        case .denied:
+          buttonText = Text("Open Settings")
+        case .authorized:
+          buttonText = Text("Start Upload")
+        default:
+          fatalError("No button should be displayed for current authorization status: \(musicAuthorizationStatus).")
+      }
     }
+    
     return buttonText
   }
   
@@ -267,9 +278,13 @@ struct App: SwiftUI.App {
     }
   }
   
+  @MainActor
   func run() async {
+    // start processing
+    uploading = true
+    
     // read all the playlist files
-    await readPlaylistJSONFiles()
+    readPlaylistJSONFiles()
     
     // for each of the playlists to add
     for playlistToAdd in playlistsToAdd {
@@ -329,6 +344,7 @@ struct App: SwiftUI.App {
       let playlist = await createPlaylist(name: playlistName)
       guard let playlist = playlist else {
         print("\(playlistName) was not created.")
+        uploading = false
         return
       }
       
@@ -344,6 +360,8 @@ struct App: SwiftUI.App {
         numberOfTracksExpected: playlistToAdd.tracks.count
       )
     }
+    
+    uploading = true
   }
   
   /// Read and print a file as a String.
